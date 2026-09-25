@@ -1,0 +1,22 @@
+[package]
+name = "mugon-sdk-bevy"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Bevy integration for games running on the Mugon platform"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+bevy_app = "0.19.1"
+bevy_ecs = "0.19.1"
+# Default features (client, server, replication, prediction, interpolation) are all
+# needed. Do NOT add "raw_connection" or "netcode" -- see the duplicate-plugin note
+# in src/lib.rs.
+lightyear = { version = "0.30.1" }
+lightyear_mugon = { path = "../mugon-sdk-lightyear/crates/lightyear_mugon" }
+
+[target.wasm32-unknown-unknown.dependencies]
+getrandom = { version = "0.3.4", features = ["wasm_js"] }
+getrandom4 = { version = "0.4.3", package = "getrandom", features = ["wasm_js"] }
