@@ -35,8 +35,8 @@ extern "C" {
     pub(crate) fn server_id(this: &MugonContext) -> String;
 
     /// Snapshot of the peers connected when the game was initialised.
-    #[wasm_bindgen(method, getter)]
-    pub(crate) fn peers(this: &MugonContext) -> js_sys::Array;
+    #[wasm_bindgen(method, getter, js_name = initialPeers)]
+    pub(crate) fn initial_peers(this: &MugonContext) -> js_sys::Array;
 
     /// `ctx.send(peerId, data, channel)`.
     ///

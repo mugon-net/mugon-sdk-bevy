@@ -87,7 +87,7 @@ impl Bridge {
         // server needs to hear about the peers that connected before it started.
         if network_mode == NetworkMode::Server {
             let mut state = state.borrow_mut();
-            for peer in context.peers().iter() {
+            for peer in context.initial_peers().iter() {
                 if let Some(peer_id) = peer.as_string() {
                     state.connects.push_back(peer_id);
                 }
