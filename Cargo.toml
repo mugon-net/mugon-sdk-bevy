@@ -2,14 +2,14 @@
 name = "mugon-sdk-bevy"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 description = "Bevy integration for games running on the Mugon platform"
 repository = "https://github.com/mugon-net/mugon-sdk-bevy"
 homepage = "https://github.com/mugon-net/mugon-sdk-bevy"
 readme = "README.md"
 keywords = ["bevy", "gamedev", "multiplayer", "wasm", "mugon"]
 categories = ["game-development", "wasm"]
-include = ["src/**/*", "README.md", "Cargo.toml"]
+include = ["src/**/*", "README.md", "LICENSE-MIT", "Cargo.toml"]
 
 [lib]
 crate-type = ["rlib"]

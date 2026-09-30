@@ -1,0 +1,24 @@
+.mugon-sdk-bevy-changes:
+  rules:
+    - changes:
+        - libraries/mugon-sdk-bevy/**/*
+
+mugon-sdk-bevy:check:
+  stage: build
+  image: rust:1
+  needs: []
+  allow_failure: true
+  rules: !reference [.mugon-sdk-bevy-changes, rules]
+  cache:
+    key: mugon-sdk-bevy-cargo
+    paths:
+      - libraries/mugon-sdk-bevy/target/
+      - .cargo-home/
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo-home
+  script:
+    - rustup target add wasm32-unknown-unknown
+    - rustup component add clippy
+    - cd libraries/mugon-sdk-bevy
+    - cargo check --target wasm32-unknown-unknown --all-features
+    - cargo clippy --target wasm32-unknown-unknown --all-features -- -D warnings

@@ -60,4 +60,12 @@ The `touch-controls` feature adds joystick/button input components and a fullscr
 
 ## License
 
-Licensed under either of MIT or Apache-2.0, at your option.
+[MIT](LICENSE-MIT)
+
+## Links
+
+- Repository and issues: <https://github.com/mugon-net/mugon-sdk-bevy>
+- JavaScript SDK: <https://github.com/mugon-net/mugon-sdk-js>
+- Lightyear transport: <https://github.com/mugon-net/mugon-sdk-lightyear>
+- CLI: <https://github.com/mugon-net/mugon-cli>
+- Platform: <https://mugon.net>

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Publishing is manual and a dry run unless explicitly switched off. The version comes
+  # from Cargo.toml (bumped in the monorepo, which this repository mirrors) -- this
+  # workflow never commits, so it can't diverge from the mirror.
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Only check what would be published (untick to publish to crates.io)"
+        required: true
+        type: boolean
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --target wasm32-unknown-unknown --all-features
+      - run: cargo clippy --target wasm32-unknown-unknown --all-features -- -D warnings
+
+  release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: [check]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Refuse to republish an existing version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if curl -sf -A "mugon-sdk-bevy release check" "https://crates.io/api/v1/crates/mugon-sdk-bevy/$VERSION" >/dev/null; then
+            echo "mugon-sdk-bevy $VERSION is already published; bump the version in the monorepo first" >&2
+            exit 1
+          fi
+      - name: Publish
+        run: cargo publish --target wasm32-unknown-unknown ${{ inputs.dry-run && '--dry-run' || '' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Tag the release
+        if: ${{ !inputs.dry-run }}
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
