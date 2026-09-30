@@ -1,127 +1,53 @@
-//! Bevy integration for games running on the [Mugon](https://mugon.net) platform.
+//! Bevy integration for games running on the [Mugon](https://mugon.net) platform, independent
+//! of any particular networking layer.
 //!
-//! Wraps [`lightyear_mugon::MugonPlugin`] (the wasm transport, see that crate for the
-//! full design) together with Lightyear's [`ClientPlugins`]/[`ServerPlugins`], and
-//! surfaces peer connect/disconnect as plain Bevy events so game code doesn't need to
-//! know anything about Lightyear's connection-lifecycle components to spawn/despawn
-//! per-player entities.
+//! [`MugonPlugin`] installs the JS bridge to the `MugonContext` that `mugon-sdk-js`'s
+//! `Mugon.start` publishes as `window.mugon` (see [`Bridge`]); the wasm must be started from
+//! inside that callback. The role and ids are known as soon as the plugin is built. It
+//! deliberately doesn't turn the bridge's queues into Bevy events itself: a networking layer
+//! built on top (e.g. `lightyear_mugon`'s `MugonLightyearPlugin`) decides how to consume them.
 //!
-//! Deliberately POC-scoped (see `games/mario-kart-poc/PLAN.md`): this is only what
-//! that game needs, not a general-purpose SDK. `ClientPlugins`/`ServerPlugins` are
-//! always both installed, matching `lightyear_mugon`'s own decision to resolve
-//! client/server role at runtime rather than compile time (a single wasm build can be
-//! told by the platform to be either).
+//! The optional `loading` feature adds [`MugonLoadingPlugin`], which reports asset loading to
+//! the platform's loading overlay.
+//!
+//! The optional `touch-controls` feature adds joystick/button input components and a
+//! fullscreen toggle — see [`touch_controls`] for how spawning them works.
+
+mod bindings;
+mod bridge;
+#[cfg(feature = "loading")]
+mod loading;
+#[cfg(feature = "touch-controls")]
+pub mod touch_controls;
 
 use bevy_app::{App, Plugin};
-use bevy_ecs::message::MessageWriter;
-use bevy_ecs::prelude::*;
-use lightyear::prelude::*;
-use lightyear_mugon::MugonPlugin as MugonTransportPlugin;
 
-/// Fired when a peer's Lightyear connection entity gets [`Connected`].
-///
-/// On the server this fires once per connected client (the `LinkOf` child entity);
-/// on the client it fires once, for its single connection to the server. `peer_id`
-/// is Lightyear's own identity for the link (a [`PeerId::Raw`] wrapping the synthetic
-/// `SocketAddr` `lightyear_mugon` assigns per platform peer id) — sufficient for
-/// `ControlledBy`/`NetworkTarget::Single` and friends; the platform's own string peer
-/// id isn't exposed outside `lightyear_mugon` today (its `peer_addr` module is
-/// private), which is fine since gameplay code only needs Lightyear-level identity.
-#[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PeerConnected {
-    pub entity: Entity,
-    pub peer_id: PeerId,
+pub use bindings::Channel;
+pub use bridge::{Bridge, NetworkMode};
+#[cfg(feature = "loading")]
+pub use loading::{MugonLoading, MugonLoadingPlugin};
+#[cfg(feature = "touch-controls")]
+pub use touch_controls::{
+    IsTouchDevice, MugonFullscreenButton, MugonFullscreenButtonPlugin, MugonJoystick,
+    MugonJoystickKnob, MugonTouchButton, MugonTouchControlsPlugin,
+};
+
+pub mod prelude {
+    pub use crate::{Bridge, Channel, MugonPlugin, NetworkMode};
+    #[cfg(feature = "loading")]
+    pub use crate::{MugonLoading, MugonLoadingPlugin};
+    #[cfg(feature = "touch-controls")]
+    pub use crate::{
+        IsTouchDevice, MugonFullscreenButton, MugonFullscreenButtonPlugin, MugonJoystick,
+        MugonJoystickKnob, MugonTouchButton, MugonTouchControlsPlugin,
+    };
 }
 
-/// Fired when a peer's Lightyear connection entity gets [`Disconnected`]. See
-/// [`PeerConnected`] for what `peer_id` is.
-#[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PeerDisconnected {
-    pub entity: Entity,
-    pub peer_id: PeerId,
-}
+/// Installs the Mugon JS bridge as a `NonSend` resource. See module docs.
+pub struct MugonPlugin;
 
-pub struct MugonBevyPlugin;
-
-impl Plugin for MugonBevyPlugin {
+impl Plugin for MugonPlugin {
     fn build(&self, app: &mut App) {
-        // Facade plugin groups first, `MugonTransportPlugin` second -- confirmed
-        // live (Milestone 1 checkpoint) that the other order panics.
-        // `server::ServerPlugins`'s `PluginGroupBuilder` adds
-        // `lightyear_link::server::ServerLinkPlugin` unconditionally, with no
-        // `is_plugin_added` guard of its own (that check only happens once, when a
-        // plugin *group* is finished and applied to the `App`). `lightyear_mugon`'s
-        // `MugonServerPlugin` also wants `ServerLinkPlugin`, but guards its own add
-        // with `is_plugin_added`. Whichever side runs first "wins" the unguarded
-        // slot; the second side's guard (if it has one) then correctly no-ops. So
-        // `ServerPlugins`/`ClientPlugins` must go first, `MugonTransportPlugin`
-        // second -- the reverse order panics at startup with "plugin was already
-        // added in application". Do not additionally enable the `lightyear` facade
-        // crate's `raw_connection`/`netcode` cargo features in this crate's
-        // Cargo.toml -- either one would make `ClientPlugins`/`ServerPlugins` try to
-        // add `RawConnectionPlugin` a second time (that one `lightyear_mugon` adds
-        // unconditionally, with no guard at all), hitting the same failure mode.
-        app.add_plugins((client::ClientPlugins::default(), server::ServerPlugins::default()));
-        app.add_plugins(MugonTransportPlugin);
-
-        // `lightyear_prediction::RollbackPlugin` (always installed by `ClientPlugins`'s default
-        // `prediction` feature) schedules `reset_input_rollback_tracker` unconditionally in
-        // `PreUpdate`, and that system takes a hard `ResMut<LastConfirmedInput>` -- but
-        // `LastConfirmedInput` is only initialized when a `PredictionManager` resource is
-        // inserted (`PredictionPlugin`'s `On<Insert, PredictionManager>` observer), which is
-        // opt-in and no Mugon game had opted into yet. Without it, that system panics with
-        // "Resource does not exist" on every tick, even with zero predicted entities. The actual
-        // prediction/rollback pipeline still stays dormant per-topology (`should_run` requires
-        // `NetworkTopology::Client`/`P2P`) and per-component (`PredictionTarget`), so inserting
-        // this unconditionally on both roles is safe -- it only prevents this crash.
-        app.insert_resource(PredictionManager::default());
-
-        app.add_message::<PeerConnected>();
-        app.add_message::<PeerDisconnected>();
-        app.add_observer(on_connected);
-        app.add_observer(on_disconnected);
-    }
-}
-
-/// Opts every connected link into replication and emits [`PeerConnected`].
-///
-/// Neither `ReplicationSender` (server-side, per connected client link) nor
-/// `ReplicationReceiver` (the client's own connection entity) are inserted
-/// automatically by Lightyear's replicon backend -- a link that lacks them stays
-/// connected (messages still flow) but never replicates entities. Every Mugon game
-/// wants replication on for every peer, so this is handled here once rather than in
-/// each game.
-fn on_connected(
-    trigger: On<Add, Connected>,
-    remote_ids: Query<&RemoteId>,
-    is_client_of: Query<(), With<server::ClientOf>>,
-    is_client: Query<(), With<Client>>,
-    mut events: MessageWriter<PeerConnected>,
-    mut commands: Commands,
-) {
-    if is_client_of.get(trigger.entity).is_ok() {
-        commands.entity(trigger.entity).insert(ReplicationSender);
-    }
-    if is_client.get(trigger.entity).is_ok() {
-        commands.entity(trigger.entity).insert(ReplicationReceiver);
-    }
-    if let Ok(remote_id) = remote_ids.get(trigger.entity) {
-        events.write(PeerConnected {
-            entity: trigger.entity,
-            peer_id: remote_id.0,
-        });
-    }
-}
-
-fn on_disconnected(
-    trigger: On<Add, Disconnected>,
-    remote_ids: Query<&RemoteId>,
-    mut events: MessageWriter<PeerDisconnected>,
-) {
-    if let Ok(remote_id) = remote_ids.get(trigger.entity) {
-        events.write(PeerDisconnected {
-            entity: trigger.entity,
-            peer_id: remote_id.0,
-        });
+        app.insert_non_send(Bridge::install());
     }
 }

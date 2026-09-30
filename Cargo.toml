@@ -4,19 +4,43 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Bevy integration for games running on the Mugon platform"
+repository = "https://github.com/mugon-net/mugon-sdk-bevy"
+homepage = "https://github.com/mugon-net/mugon-sdk-bevy"
+readme = "README.md"
+keywords = ["bevy", "gamedev", "multiplayer", "wasm", "mugon"]
+categories = ["game-development", "wasm"]
+include = ["src/**/*", "README.md", "Cargo.toml"]
 
 [lib]
 crate-type = ["rlib"]
 
+[features]
+loading = ["dep:bevy_asset"]
+touch-controls = [
+    "dep:bevy_input",
+    "dep:bevy_math",
+    "dep:bevy_ui",
+    "dep:bevy_window",
+    "dep:encase_derive_impl",
+    "dep:web-sys",
+]
+
 [dependencies]
 bevy_app = "0.19.1"
 bevy_ecs = "0.19.1"
-# Default features (client, server, replication, prediction, interpolation) are all
-# needed. Do NOT add "raw_connection" or "netcode" -- see the duplicate-plugin note
-# in src/lib.rs.
-lightyear = { version = "0.30.1" }
-lightyear_mugon = { path = "../mugon-sdk-lightyear/crates/lightyear_mugon" }
+bytes = "1.12.1"
+js-sys = "0.3.105"
+wasm-bindgen = "0.2.128"
+
+bevy_asset = { version = "0.19.1", optional = true }
+bevy_input = { version = "0.19.1", optional = true, features = ["mouse", "touch"] }
+bevy_math = { version = "0.19.1", optional = true }
+bevy_ui = { version = "0.19.1", optional = true }
+bevy_window = { version = "0.19.1", optional = true }
+# Pinned: 0.12.2's proc-macro pulls in syn 3, which conflicts with bevy_encase_derive 0.19.1.
+encase_derive_impl = { version = "=0.12.1", optional = true }
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3.4", features = ["wasm_js"] }
 getrandom4 = { version = "0.4.3", package = "getrandom", features = ["wasm_js"] }
+web-sys = { version = "0.3", optional = true, features = ["Navigator", "Window"] }
