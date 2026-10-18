@@ -39,7 +39,7 @@ fn setup(bridge: NonSend<Bridge>) {
 
 `Bridge` is a `NonSend` resource (it wraps JS values). It offers `network_mode()`, `own_id()`,
 `server_id()`, queues to drain (`pop_connect`, `pop_disconnect`, `pop_recv`), `send`,
-`disconnect`, `toggle_fullscreen`, `show_invite`, `set_progress` and `loaded`.
+`disconnect`, `toggle_fullscreen`, `show_invite`, `end_game`, `next_game`, `set_progress` and `loaded`.
 
 ### Loading progress
 

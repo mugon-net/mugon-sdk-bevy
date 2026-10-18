@@ -16,9 +16,11 @@
 //! top (e.g. Lightyear) wants "pop whatever's next" access, not a fixed event schema.
 
 use crate::bindings::{self, Channel, MugonContext};
+use crate::settings::{self, SettingValue};
 use bytes::Bytes;
 use js_sys::{Reflect, Uint8Array};
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
@@ -48,6 +50,7 @@ pub struct Bridge {
     network_mode: NetworkMode,
     own_id: String,
     server_id: String,
+    settings: BTreeMap<String, SettingValue>,
     // Kept alive for as long as `Bridge` exists (i.e. for the app's lifetime) so JS can keep
     // calling into them. Never `.forget()`-leaked: dropping `Bridge` (which normally only
     // happens when the whole App/World goes away) drops these too.
@@ -132,6 +135,7 @@ impl Bridge {
             network_mode,
             own_id: context.own_id(),
             server_id: context.server_id(),
+            settings: settings::read_settings(&context.settings()),
             context,
             _on_connect: on_connect,
             _on_disconnect: on_disconnect,
@@ -152,6 +156,60 @@ impl Bridge {
     /// The server peer's id; equal to [`own_id`](Self::own_id) on the server itself.
     pub fn server_id(&self) -> &str {
         &self.server_id
+    }
+
+    /// Every setting the lobby chose a value for, in key order.
+    pub fn settings(&self) -> impl Iterator<Item = (&str, &SettingValue)> {
+        self.settings
+            .iter()
+            .map(|(key, value)| (key.as_str(), value))
+    }
+
+    /// The value of the setting `key`, whatever its type.
+    pub fn setting(&self, key: &str) -> Option<&SettingValue> {
+        self.settings.get(key)
+    }
+
+    /// A `boolean` setting; `None` if absent or declared with another type.
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        match self.setting(key)? {
+            SettingValue::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// A `number` setting; `None` if absent or declared with another type.
+    pub fn get_number(&self, key: &str) -> Option<f64> {
+        match self.setting(key)? {
+            SettingValue::Number(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// A `text` setting or a single-choice `select`; `None` if absent or declared with another
+    /// type.
+    pub fn get_string(&self, key: &str) -> Option<&str> {
+        match self.setting(key)? {
+            SettingValue::Text(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// A multi-choice `select`. A single-choice one reads as a one-element list, as in the
+    /// JavaScript SDK; `None` if absent or declared with another type.
+    pub fn get_strings(&self, key: &str) -> Option<Vec<&str>> {
+        match self.setting(key)? {
+            SettingValue::List(values) => Some(values.iter().map(String::as_str).collect()),
+            SettingValue::Text(value) => Some(vec![value.as_str()]),
+            _ => None,
+        }
+    }
+
+    /// Deserializes all settings into `T`, whose field names (or `#[serde(rename = "...")]`s)
+    /// are the setting keys. Needs the `serde` feature.
+    #[cfg(feature = "serde")]
+    pub fn settings_as<'de, T: serde::Deserialize<'de>>(&self) -> Result<T, crate::SettingsError> {
+        settings::from_settings(&self.settings)
     }
 
     /// Pops the next queued peer id that connected, if any.
@@ -191,6 +249,29 @@ impl Bridge {
     /// `ctx.showInvite()`.
     pub fn show_invite(&self) {
         self.context.show_invite();
+    }
+
+    /// `ctx.endGame()`: ends the game and sends everyone back to the lobby right away. Host
+    /// only; on a client the call is dropped with a console warning.
+    pub fn end_game(&self) {
+        self.context.end_game();
+    }
+
+    /// `ctx.nextGame(settings)`: asks the host to start the next round. The host confirms
+    /// first; settings the game version rejects end the game instead.
+    ///
+    /// `settings` replaces the lobby's values as a whole, so start from
+    /// [`cloned_settings`](Self::cloned_settings), change what the next round needs and pass it
+    /// back. A setting left out falls back to its default. Host only; on a client the call is
+    /// dropped with a console warning.
+    pub fn next_game(&self, settings: &BTreeMap<String, SettingValue>) {
+        self.context.next_game(&settings::write_settings(settings));
+    }
+
+    /// An owned copy of [`settings`](Self::settings), to edit and hand to
+    /// [`next_game`](Self::next_game).
+    pub fn cloned_settings(&self) -> BTreeMap<String, SettingValue> {
+        self.settings.clone()
     }
 
     /// Reports loading progress (`fraction` in `0.0..=1.0`) to the platform's loading overlay.

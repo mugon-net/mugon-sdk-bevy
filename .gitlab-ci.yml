@@ -20,3 +20,19 @@ mugon-sdk-bevy:codestyle:
     - cd libraries/mugon-sdk-bevy
     - cargo check --target wasm32-unknown-unknown --all-features
     - cargo clippy --target wasm32-unknown-unknown --all-features -- -D warnings
+
+mugon-sdk-bevy:test:
+  stage: test
+  image: rust:1
+  needs: []
+  rules: !reference [.mugon-sdk-bevy-changes, rules]
+  cache:
+    key: mugon-sdk-bevy-cargo
+    paths:
+      - libraries/mugon-sdk-bevy/target/
+      - .cargo-home/
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo-home
+  script:
+    - cd libraries/mugon-sdk-bevy
+    - cargo test --lib --all-features

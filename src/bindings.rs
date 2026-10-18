@@ -38,6 +38,10 @@ extern "C" {
     #[wasm_bindgen(method, getter, js_name = initialPeers)]
     pub(crate) fn initial_peers(this: &MugonContext) -> js_sys::Array;
 
+    /// `ctx.settings`: the lobby's chosen values, keyed by setting key. Frozen at init.
+    #[wasm_bindgen(method, getter)]
+    pub(crate) fn settings(this: &MugonContext) -> js_sys::Object;
+
     /// `ctx.send(peerId, data, channel)`.
     ///
     /// The JS side transfers (detaches) `data`'s backing `ArrayBuffer`. Callers must pass a
@@ -62,6 +66,14 @@ extern "C" {
     /// `ctx.showInvite()`.
     #[wasm_bindgen(method, js_name = showInvite)]
     pub(crate) fn show_invite(this: &MugonContext);
+
+    /// `ctx.endGame()`. Host only: the SDK warns and drops the call on a client.
+    #[wasm_bindgen(method, js_name = endGame)]
+    pub(crate) fn end_game(this: &MugonContext);
+
+    /// `ctx.nextGame(settings)`. Host only: the SDK warns and drops the call on a client.
+    #[wasm_bindgen(method, js_name = nextGame)]
+    pub(crate) fn next_game(this: &MugonContext, settings: &js_sys::Object);
 
     /// `ctx.toggleFullscreen()`. Fullscreens the gameframe's own document, not the parent
     /// frame — a click's transient activation doesn't cross frames via postMessage.
