@@ -58,6 +58,14 @@ assets have loaded (or failed). Games with nothing to load call `Bridge::loaded(
 
 The `touch-controls` feature adds joystick/button input components and a fullscreen toggle.
 
+### Editor scenes
+
+The `scene` feature has helpers for levels exported by the Mugon editor: the `Marker`/`MarkerShape` volumes the exported scenes use,
+`world_transform` (an entity's world pose right after spawning, before Bevy's transform propagation has run) and
+`markers::<C>(world)` (every entity carrying component `C`, with its world pose, surface point and a point-in-volume test).
+The `avian` feature adds `StaticMeshColliderPlugin` and the `StaticMeshCollider` tag, which build static trimesh colliders for the
+models of tagged scene entities.
+
 ## License
 
 [MIT](LICENSE-MIT)

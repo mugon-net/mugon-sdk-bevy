@@ -14,6 +14,9 @@
 //! The optional `loading` feature adds [`MugonLoadingPlugin`], which reports asset loading to
 //! the platform's loading overlay.
 //!
+//! The optional `scene` feature adds helpers for levels exported by the Mugon editor (see [`scene`]);
+//! `avian` adds static mesh colliders for their models.
+//!
 //! The optional `touch-controls` feature adds joystick/button input components and a
 //! fullscreen toggle — see [`touch_controls`] for how spawning them works.
 
@@ -21,6 +24,8 @@ mod bindings;
 mod bridge;
 #[cfg(feature = "loading")]
 mod loading;
+#[cfg(feature = "scene")]
+pub mod scene;
 mod settings;
 #[cfg(feature = "touch-controls")]
 pub mod touch_controls;

@@ -17,6 +17,15 @@ crate-type = ["rlib"]
 [features]
 serde = ["dep:serde"]
 loading = ["dep:bevy_asset"]
+scene = ["dep:bevy_math", "dep:bevy_transform"]
+avian = [
+    "scene",
+    "dep:avian3d",
+    "dep:bevy_asset",
+    "dep:bevy_log",
+    "dep:bevy_mesh",
+    "dep:bevy_world_serialization",
+]
 touch-controls = [
     "dep:bevy_input",
     "dep:bevy_math",
@@ -39,6 +48,11 @@ bevy_input = { version = "0.19.1", optional = true, features = ["mouse", "touch"
 bevy_math = { version = "0.19.1", optional = true }
 bevy_ui = { version = "0.19.1", optional = true }
 bevy_window = { version = "0.19.1", optional = true }
+bevy_transform = { version = "0.19.1", optional = true }
+bevy_log = { version = "0.19.1", optional = true }
+bevy_mesh = { version = "0.19.1", optional = true }
+bevy_world_serialization = { version = "0.19.1", optional = true }
+avian3d = { version = "0.7.0", optional = true, default-features = false, features = ["3d", "parry-f32", "collider-from-mesh"] }
 # Pinned: 0.12.2's proc-macro pulls in syn 3, which conflicts with bevy_encase_derive 0.19.1.
 encase_derive_impl = { version = "=0.12.1", optional = true }
 
