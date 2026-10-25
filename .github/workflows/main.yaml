@@ -5,11 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Publishing is manual and a dry run unless explicitly switched off. The version comes
-  # from Cargo.toml (bumped in the monorepo, which this repository mirrors) -- this
-  # workflow never commits, so it can't diverge from the mirror.
+  # Publishing is manual and a dry run unless explicitly switched off. The typed version is
+  # checked against Cargo.toml (bumped in the monorepo, which this repository mirrors) --
+  # this workflow never commits, so it can't diverge from the mirror.
   workflow_dispatch:
     inputs:
+      version:
+        description: "Version to release (x.y.z); must equal the version in Cargo.toml"
+        required: true
+        type: string
       dry-run:
         description: "Only check what would be published (untick to publish to crates.io)"
         required: true
@@ -44,6 +48,13 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      - name: Check the requested version against Cargo.toml
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ "$VERSION" != "${{ inputs.version }}" ]; then
+            echo "Cargo.toml is at $VERSION, not ${{ inputs.version }}; bump it in the monorepo first" >&2
+            exit 1
+          fi
       - name: Refuse to republish an existing version
         run: |
           VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')

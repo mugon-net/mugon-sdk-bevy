@@ -5,7 +5,7 @@
 //! `Mugon.start` publishes as `window.mugon` (see [`Bridge`]); the wasm must be started from
 //! inside that callback. The role and ids are known as soon as the plugin is built. It
 //! deliberately doesn't turn the bridge's queues into Bevy events itself: a networking layer
-//! built on top (e.g. `lightyear_mugon`'s `MugonLightyearPlugin`) decides how to consume them.
+//! built on top (e.g. `mugon-sdk-lightyear`'s `MugonLightyearPlugin`) decides how to consume them.
 //!
 //! The lobby's chosen setting values are read through [`Bridge`] (`get_bool`, `get_number`,
 //! `get_string`, `get_strings`, `settings`), or with the optional `serde` feature deserialized into a

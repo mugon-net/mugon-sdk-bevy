@@ -7,7 +7,7 @@ up: whether this process is the **server** (host) or a **client**, its own id, t
 and the peers already connected. This crate exposes that context to a Bevy app and lets the game
 report loading progress to the platform's loading overlay. It is deliberately independent of any
 networking layer; for [Lightyear](https://github.com/cBournhonesque/lightyear) see
-`lightyear_mugon`.
+`mugon-sdk-lightyear`.
 
 ## Requirements
 
