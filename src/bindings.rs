@@ -39,6 +39,10 @@ extern "C" {
     #[wasm_bindgen(method, getter, js_name = initialPlayers)]
     pub(crate) fn initial_players(this: &MugonContext) -> js_sys::Array;
 
+    /// `ctx.carryOver`: what the previous round handed over, host only; `undefined` otherwise.
+    #[wasm_bindgen(method, getter, js_name = carryOver)]
+    pub(crate) fn carry_over(this: &MugonContext) -> Option<String>;
+
     /// `ctx.settings`: the lobby's chosen values, keyed by setting key. Frozen at init.
     #[wasm_bindgen(method, getter)]
     pub(crate) fn settings(this: &MugonContext) -> js_sys::Object;
@@ -49,7 +53,12 @@ extern "C" {
     /// `Uint8Array` that owns its buffer outright (e.g. a fresh copy), never a view into a
     /// buffer something else still expects to read from afterwards.
     #[wasm_bindgen(method)]
-    pub(crate) fn send(this: &MugonContext, player_id: &str, data: &js_sys::Uint8Array, channel: u8);
+    pub(crate) fn send(
+        this: &MugonContext,
+        player_id: &str,
+        data: &js_sys::Uint8Array,
+        channel: u8,
+    );
 
     /// `ctx.disconnectPlayer(playerId)`.
     #[wasm_bindgen(method, js_name = disconnectPlayer)]
@@ -74,7 +83,11 @@ extern "C" {
 
     /// `ctx.requestNextRound(settings)`. Host only: the SDK warns and drops the call on a client.
     #[wasm_bindgen(method, js_name = requestNextRound)]
-    pub(crate) fn request_next_round(this: &MugonContext, settings: &js_sys::Object);
+    pub(crate) fn request_next_round(
+        this: &MugonContext,
+        settings: &js_sys::Object,
+        options: &js_sys::Object,
+    );
 
     /// `ctx.toggleFullscreen()`. Fullscreens the gameframe's own document, not the parent
     /// frame — a click's transient activation doesn't cross frames via postMessage.

@@ -60,6 +60,7 @@ pub struct Bridge {
     self_player: Player,
     server_player: Player,
     settings: BTreeMap<String, SettingValue>,
+    carry_over: Option<String>,
     // Kept alive for as long as `Bridge` exists (i.e. for the app's lifetime) so JS can keep
     // calling into them. Never `.forget()`-leaked: dropping `Bridge` (which normally only
     // happens when the whole App/World goes away) drops these too.
@@ -154,6 +155,7 @@ impl Bridge {
             server_player: read_player(&context.server_player())
                 .expect("Mugon context has no valid `server` player"),
             settings: settings::read_settings(&context.settings()),
+            carry_over: context.carry_over(),
             context,
             _on_connect: on_connect,
             _on_disconnect: on_disconnect,
@@ -275,15 +277,33 @@ impl Bridge {
         self.context.end_game();
     }
 
-    /// `ctx.requestNextRound(settings)`: asks the host to start the next round. The host confirms
-    /// first; settings the game version rejects end the game instead.
+    /// `ctx.requestNextRound(settings, { carryOver })`: asks the host to start the next round. The
+    /// host confirms first; settings the game version rejects end the game instead.
+    ///
+    /// `carry_over` is any string up to 1 MiB that [`carry_over`](Self::carry_over) returns in the
+    /// next round; a longer one drops the whole call with a console warning. It is not secret.
     ///
     /// `settings` replaces the lobby's values as a whole, so start from
     /// [`cloned_settings`](Self::cloned_settings), change what the next round needs and pass it
     /// back. A setting left out falls back to its default. Host only; on a client the call is
     /// dropped with a console warning.
-    pub fn next_round(&self, settings: &BTreeMap<String, SettingValue>) {
-        self.context.request_next_round(&settings::write_settings(settings));
+    pub fn next_round(&self, settings: &BTreeMap<String, SettingValue>, carry_over: Option<&str>) {
+        let options = js_sys::Object::new();
+        if let Some(carry_over) = carry_over {
+            let _ = Reflect::set(
+                &options,
+                &JsValue::from_str("carryOver"),
+                &JsValue::from_str(carry_over),
+            );
+        }
+        self.context
+            .request_next_round(&settings::write_settings(settings), &options);
+    }
+
+    /// What the previous round handed over through [`next_round`](Self::next_round). Only the
+    /// host gets it, and only in the round right after; `None` otherwise (also after a reload).
+    pub fn carry_over(&self) -> Option<&str> {
+        self.carry_over.as_deref()
     }
 
     /// An owned copy of [`settings`](Self::settings), to edit and hand to
