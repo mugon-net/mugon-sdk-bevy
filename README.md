@@ -3,8 +3,8 @@
 Bevy integration for games running on the [mugon.net](https://mugon.net) platform.
 
 The platform embeds your game in a sandboxed iframe and hands it a context once the network is
-up: whether this process is the **server** (host) or a **client**, its own id, the server's id,
-and the peers already connected. This crate exposes that context to a Bevy app and lets the game
+up: whether this process is the **server** (host) or a **client**, its own player, the server player,
+and the players already connected. This crate exposes that context to a Bevy app and lets the game
 report loading progress to the platform's loading overlay. It is deliberately independent of any
 networking layer; for [Lightyear](https://github.com/cBournhonesque/lightyear) see
 `mugon-sdk-lightyear`.
@@ -31,15 +31,15 @@ fn main() {
 }
 
 fn setup(bridge: NonSend<Bridge>) {
-    info!("running as {:?} with id {}", bridge.network_mode(), bridge.own_id());
+    info!("running as {:?} with id {}", bridge.network_role(), bridge.self_player().id);
     // Close the platform's loading overlay: the game is playable.
     bridge.loaded();
 }
 ```
 
-`Bridge` is a `NonSend` resource (it wraps JS values). It offers `network_mode()`, `own_id()`,
-`server_id()`, queues to drain (`pop_connect`, `pop_disconnect`, `pop_recv`), `send`,
-`disconnect`, `toggle_fullscreen`, `show_invite`, `end_game`, `next_game`, `set_progress` and `loaded`.
+`Bridge` is a `NonSend` resource (it wraps JS values). It offers `network_role()`, `self_player()`,
+`server_player()`, queues to drain (`pop_connect`, `pop_disconnect`, `pop_recv`), `send`,
+`disconnect_player`, `toggle_fullscreen`, `show_invite`, `end_game`, `next_round`, `set_progress` and `loaded`.
 
 ### Loading progress
 

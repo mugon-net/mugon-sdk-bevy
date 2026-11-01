@@ -2,7 +2,7 @@
 //!
 //! `Bridge` is registered exactly once, at [`crate::MugonPlugin::build`] time, via
 //! [`Bridge::install`]. It reads the `MugonContext` that `Mugon.start` published as
-//! `window.mugon` (role and ids are known synchronously — there is no handshake to wait for),
+//! `window.mugon` (role and players are known synchronously — there is no handshake to wait for),
 //! subscribes to its events once, and owns the three [`Closure`]s for the rest of the
 //! process's lifetime, forwarding everything they receive into a plain `Rc<RefCell<_>>` queue
 //! that ordinary Bevy systems drain every frame.
@@ -26,20 +26,29 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
+/// A participant in the game. The name is the player's display name, supplied by the
+/// platform; it is not unique, so identify players by `id`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Player {
+    pub id: String,
+    pub name: String,
+}
+
+/// The part this player takes in the game's network.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NetworkMode {
+pub enum NetworkRole {
     Server,
     Client,
 }
 
 #[derive(Default)]
 pub(crate) struct BridgeState {
-    /// Peer ids that connected, oldest first. On a server it starts out with the peers that
+    /// Players that connected, oldest first. On a server it starts out with the players that
     /// were already connected when the game was initialised.
-    pub(crate) connects: VecDeque<String>,
-    /// Peer ids that disconnected, oldest first.
+    pub(crate) connects: VecDeque<Player>,
+    /// Ids of the players that disconnected, oldest first.
     pub(crate) disconnects: VecDeque<String>,
-    /// `(from_peer_id, payload)` pairs received, oldest first.
+    /// `(from_player_id, payload)` pairs received, oldest first.
     pub(crate) recv: VecDeque<(String, Bytes)>,
 }
 
@@ -47,9 +56,9 @@ pub(crate) struct BridgeState {
 pub struct Bridge {
     pub(crate) state: Rc<RefCell<BridgeState>>,
     context: MugonContext,
-    network_mode: NetworkMode,
-    own_id: String,
-    server_id: String,
+    network_role: NetworkRole,
+    self_player: Player,
+    server_player: Player,
     settings: BTreeMap<String, SettingValue>,
     // Kept alive for as long as `Bridge` exists (i.e. for the app's lifetime) so JS can keep
     // calling into them. Never `.forget()`-leaked: dropping `Bridge` (which normally only
@@ -57,6 +66,13 @@ pub struct Bridge {
     _on_connect: Closure<dyn FnMut(JsValue)>,
     _on_disconnect: Closure<dyn FnMut(JsValue)>,
     _on_message: Closure<dyn FnMut(JsValue)>,
+}
+
+fn read_player(value: &JsValue) -> Option<Player> {
+    Some(Player {
+        id: get_string_field(value, "id")?,
+        name: get_string_field(value, "name")?,
+    })
 }
 
 fn get_string_field(obj: &JsValue, key: &str) -> Option<String> {
@@ -79,38 +95,38 @@ impl Bridge {
     /// protocol mismatch, not something to silently ignore).
     pub(crate) fn install() -> Self {
         let context = bindings::context();
-        let network_mode = match context.role().as_str() {
-            "server" => NetworkMode::Server,
-            "client" => NetworkMode::Client,
+        let network_role = match context.role().as_str() {
+            "server" => NetworkRole::Server,
+            "client" => NetworkRole::Client,
             other => panic!("Mugon context has an unknown role: {other:?}"),
         };
 
         let state = Rc::new(RefCell::new(BridgeState::default()));
-        // A client's only peer is its server, which its link is spawned for anyway; only a
-        // server needs to hear about the peers that connected before it started.
-        if network_mode == NetworkMode::Server {
+        // A client's only player is its server, which its link is spawned for anyway; only a
+        // server needs to hear about the players that connected before it started.
+        if network_role == NetworkRole::Server {
             let mut state = state.borrow_mut();
-            for peer in context.initial_peers().iter() {
-                if let Some(peer_id) = peer.as_string() {
-                    state.connects.push_back(peer_id);
+            for player in context.initial_players().iter() {
+                if let Some(player) = read_player(&player) {
+                    state.connects.push_back(player);
                 }
             }
         }
 
         let on_connect = {
             let state = state.clone();
-            Closure::wrap(Box::new(move |peer_id: JsValue| {
-                if let Some(peer_id) = peer_id.as_string() {
-                    state.borrow_mut().connects.push_back(peer_id);
+            Closure::wrap(Box::new(move |player: JsValue| {
+                if let Some(player) = read_player(&player) {
+                    state.borrow_mut().connects.push_back(player);
                 }
             }) as Box<dyn FnMut(JsValue)>)
         };
 
         let on_disconnect = {
             let state = state.clone();
-            Closure::wrap(Box::new(move |peer_id: JsValue| {
-                if let Some(peer_id) = peer_id.as_string() {
-                    state.borrow_mut().disconnects.push_back(peer_id);
+            Closure::wrap(Box::new(move |player_id: JsValue| {
+                if let Some(player_id) = player_id.as_string() {
+                    state.borrow_mut().disconnects.push_back(player_id);
                 }
             }) as Box<dyn FnMut(JsValue)>)
         };
@@ -126,15 +142,17 @@ impl Bridge {
             }) as Box<dyn FnMut(JsValue)>)
         };
 
-        context.on("connect", on_connect.as_ref().unchecked_ref());
-        context.on("disconnect", on_disconnect.as_ref().unchecked_ref());
+        context.on("playerConnected", on_connect.as_ref().unchecked_ref());
+        context.on("playerDisconnected", on_disconnect.as_ref().unchecked_ref());
         context.on("message", on_message.as_ref().unchecked_ref());
 
         Self {
             state,
-            network_mode,
-            own_id: context.own_id(),
-            server_id: context.server_id(),
+            network_role,
+            self_player: read_player(&context.self_player())
+                .expect("Mugon context has no valid `self` player"),
+            server_player: read_player(&context.server_player())
+                .expect("Mugon context has no valid `server` player"),
             settings: settings::read_settings(&context.settings()),
             context,
             _on_connect: on_connect,
@@ -144,18 +162,18 @@ impl Bridge {
     }
 
     /// Whether this process is the server or a client of the session.
-    pub fn network_mode(&self) -> NetworkMode {
-        self.network_mode
+    pub fn network_role(&self) -> NetworkRole {
+        self.network_role
     }
 
-    /// This peer's own id.
-    pub fn own_id(&self) -> &str {
-        &self.own_id
+    /// This player.
+    pub fn self_player(&self) -> &Player {
+        &self.self_player
     }
 
-    /// The server peer's id; equal to [`own_id`](Self::own_id) on the server itself.
-    pub fn server_id(&self) -> &str {
-        &self.server_id
+    /// The server player; equal to [`self_player`](Self::self_player) on the server itself.
+    pub fn server_player(&self) -> &Player {
+        &self.server_player
     }
 
     /// Every setting the lobby chose a value for, in key order.
@@ -212,33 +230,33 @@ impl Bridge {
         settings::from_settings(&self.settings)
     }
 
-    /// Pops the next queued peer id that connected, if any.
-    pub fn pop_connect(&self) -> Option<String> {
+    /// Pops the next queued player that connected, if any.
+    pub fn pop_connect(&self) -> Option<Player> {
         self.state.borrow_mut().connects.pop_front()
     }
 
-    /// Pops the next queued peer id that disconnected, if any.
+    /// Pops the next queued id of a player that disconnected, if any.
     pub fn pop_disconnect(&self) -> Option<String> {
         self.state.borrow_mut().disconnects.pop_front()
     }
 
-    /// Pops the next queued `(from_peer_id, payload)`, if any.
+    /// Pops the next queued `(from_player_id, payload)`, if any.
     pub fn pop_recv(&self) -> Option<(String, Bytes)> {
         self.state.borrow_mut().recv.pop_front()
     }
 
-    /// Sends `data` to `peer_id` on `channel`. Copies `data` into a fresh `Uint8Array` first —
+    /// Sends `data` to `player_id` on `channel`. Copies `data` into a fresh `Uint8Array` first —
     /// `ctx.send` transfers the buffer it's given, so it must never be a view into
     /// something else still owns (e.g. a transport's pooled packet buffers).
-    pub fn send(&self, peer_id: &str, data: &[u8], channel: Channel) {
+    pub fn send(&self, player_id: &str, data: &[u8], channel: Channel) {
         let array = Uint8Array::new_with_length(data.len() as u32);
         array.copy_from(data);
-        self.context.send(peer_id, &array, channel as u8);
+        self.context.send(player_id, &array, channel as u8);
     }
 
-    /// `ctx.drop(peer_id)`.
-    pub fn disconnect(&self, peer_id: &str) {
-        self.context.drop_peer(peer_id);
+    /// `ctx.disconnectPlayer(player_id)`.
+    pub fn disconnect_player(&self, player_id: &str) {
+        self.context.disconnect_player(player_id);
     }
 
     /// `ctx.toggleFullscreen()`.
@@ -257,19 +275,19 @@ impl Bridge {
         self.context.end_game();
     }
 
-    /// `ctx.nextGame(settings)`: asks the host to start the next round. The host confirms
+    /// `ctx.requestNextRound(settings)`: asks the host to start the next round. The host confirms
     /// first; settings the game version rejects end the game instead.
     ///
     /// `settings` replaces the lobby's values as a whole, so start from
     /// [`cloned_settings`](Self::cloned_settings), change what the next round needs and pass it
     /// back. A setting left out falls back to its default. Host only; on a client the call is
     /// dropped with a console warning.
-    pub fn next_game(&self, settings: &BTreeMap<String, SettingValue>) {
-        self.context.next_game(&settings::write_settings(settings));
+    pub fn next_round(&self, settings: &BTreeMap<String, SettingValue>) {
+        self.context.request_next_round(&settings::write_settings(settings));
     }
 
     /// An owned copy of [`settings`](Self::settings), to edit and hand to
-    /// [`next_game`](Self::next_game).
+    /// [`next_round`](Self::next_round).
     pub fn cloned_settings(&self) -> BTreeMap<String, SettingValue> {
         self.settings.clone()
     }

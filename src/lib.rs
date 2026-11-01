@@ -33,7 +33,7 @@ pub mod touch_controls;
 use bevy_app::{App, Plugin};
 
 pub use bindings::Channel;
-pub use bridge::{Bridge, NetworkMode};
+pub use bridge::{Bridge, NetworkRole, Player};
 #[cfg(feature = "loading")]
 pub use loading::{MugonLoading, MugonLoadingPlugin};
 pub use settings::SettingValue;
@@ -46,7 +46,7 @@ pub use touch_controls::{
 };
 
 pub mod prelude {
-    pub use crate::{Bridge, Channel, MugonPlugin, NetworkMode, SettingValue};
+    pub use crate::{Bridge, Channel, MugonPlugin, NetworkRole, Player, SettingValue};
     #[cfg(feature = "touch-controls")]
     pub use crate::{
         IsTouchDevice, MugonFullscreenButton, MugonFullscreenButtonPlugin, MugonJoystick,

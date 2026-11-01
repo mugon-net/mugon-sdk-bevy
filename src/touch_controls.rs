@@ -18,7 +18,7 @@ use bevy_math::Vec2;
 use bevy_ui::prelude::*;
 use bevy_window::Window;
 
-/// Whether this peer is on a touch-capable device. Set once at startup by
+/// Whether this player is on a touch-capable device. Set once at startup by
 /// [`MugonTouchControlsPlugin`]; whether to spawn controls at all is up to the consumer.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IsTouchDevice(pub bool);

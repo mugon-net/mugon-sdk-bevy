@@ -27,32 +27,33 @@ extern "C" {
     #[wasm_bindgen(method, getter)]
     pub(crate) fn role(this: &MugonContext) -> String;
 
-    #[wasm_bindgen(method, getter, js_name = ownId)]
-    pub(crate) fn own_id(this: &MugonContext) -> String;
+    /// `ctx.self`: this player, as an `{ id, name }` object.
+    #[wasm_bindgen(method, getter, js_name = self)]
+    pub(crate) fn self_player(this: &MugonContext) -> JsValue;
 
-    /// The server peer's id; equal to `ownId` on the server itself.
-    #[wasm_bindgen(method, getter, js_name = serverId)]
-    pub(crate) fn server_id(this: &MugonContext) -> String;
+    /// `ctx.server`: the server player; the same as `ctx.self` on the server itself.
+    #[wasm_bindgen(method, getter, js_name = server)]
+    pub(crate) fn server_player(this: &MugonContext) -> JsValue;
 
-    /// Snapshot of the peers connected when the game was initialised.
-    #[wasm_bindgen(method, getter, js_name = initialPeers)]
-    pub(crate) fn initial_peers(this: &MugonContext) -> js_sys::Array;
+    /// Snapshot of the players connected when the game was initialised.
+    #[wasm_bindgen(method, getter, js_name = initialPlayers)]
+    pub(crate) fn initial_players(this: &MugonContext) -> js_sys::Array;
 
     /// `ctx.settings`: the lobby's chosen values, keyed by setting key. Frozen at init.
     #[wasm_bindgen(method, getter)]
     pub(crate) fn settings(this: &MugonContext) -> js_sys::Object;
 
-    /// `ctx.send(peerId, data, channel)`.
+    /// `ctx.send(playerId, data, channel)`.
     ///
     /// The JS side transfers (detaches) `data`'s backing `ArrayBuffer`. Callers must pass a
     /// `Uint8Array` that owns its buffer outright (e.g. a fresh copy), never a view into a
     /// buffer something else still expects to read from afterwards.
     #[wasm_bindgen(method)]
-    pub(crate) fn send(this: &MugonContext, peer_id: &str, data: &js_sys::Uint8Array, channel: u8);
+    pub(crate) fn send(this: &MugonContext, player_id: &str, data: &js_sys::Uint8Array, channel: u8);
 
-    /// `ctx.drop(peerId)`.
-    #[wasm_bindgen(method, js_name = drop)]
-    pub(crate) fn drop_peer(this: &MugonContext, peer_id: &str);
+    /// `ctx.disconnectPlayer(playerId)`.
+    #[wasm_bindgen(method, js_name = disconnectPlayer)]
+    pub(crate) fn disconnect_player(this: &MugonContext, player_id: &str);
 
     /// `ctx.on(event, handler)`; returns the unsubscribe function. Events that arrived while
     /// no handler was registered are delivered to the first one.
@@ -71,9 +72,9 @@ extern "C" {
     #[wasm_bindgen(method, js_name = endGame)]
     pub(crate) fn end_game(this: &MugonContext);
 
-    /// `ctx.nextGame(settings)`. Host only: the SDK warns and drops the call on a client.
-    #[wasm_bindgen(method, js_name = nextGame)]
-    pub(crate) fn next_game(this: &MugonContext, settings: &js_sys::Object);
+    /// `ctx.requestNextRound(settings)`. Host only: the SDK warns and drops the call on a client.
+    #[wasm_bindgen(method, js_name = requestNextRound)]
+    pub(crate) fn request_next_round(this: &MugonContext, settings: &js_sys::Object);
 
     /// `ctx.toggleFullscreen()`. Fullscreens the gameframe's own document, not the parent
     /// frame — a click's transient activation doesn't cross frames via postMessage.
