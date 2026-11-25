@@ -17,41 +17,36 @@
 //! The optional `scene` feature adds helpers for levels exported by the Mugon editor (see [`scene`]);
 //! `avian` adds static mesh colliders for their models.
 //!
-//! The optional `touch-controls` feature adds joystick/button input components and a
-//! fullscreen toggle — see [`touch_controls`] for how spawning them works.
+//! The optional `fullscreen` feature adds [`MugonFullscreenToggle`]: put it on any UI entity that
+//! emits `bevy_ui_widgets::Activate` to toggle the game frame's fullscreen. Joysticks and touch
+//! buttons live in the `mugon-sdk-controls-bevy` crate; games combine them with their own UI.
 
 mod bindings;
 mod bridge;
+#[cfg(feature = "fullscreen")]
+mod fullscreen;
 #[cfg(feature = "loading")]
 mod loading;
 #[cfg(feature = "scene")]
 pub mod scene;
 mod settings;
-#[cfg(feature = "touch-controls")]
-pub mod touch_controls;
 
 use bevy_app::{App, Plugin};
 
 pub use bindings::Channel;
-pub use bridge::{Bridge, NetworkRole, Player};
+pub use bridge::{Bridge, NetworkRole, Player, PlayerCharacter};
 #[cfg(feature = "loading")]
 pub use loading::{MugonLoading, MugonLoadingPlugin};
 pub use settings::SettingValue;
 #[cfg(feature = "serde")]
 pub use settings::SettingsError;
-#[cfg(feature = "touch-controls")]
-pub use touch_controls::{
-    IsTouchDevice, MugonFullscreenButton, MugonFullscreenButtonPlugin, MugonJoystick,
-    MugonJoystickKnob, MugonTouchButton, MugonTouchControlsPlugin,
-};
+#[cfg(feature = "fullscreen")]
+pub use fullscreen::{MugonFullscreenPlugin, MugonFullscreenToggle};
 
 pub mod prelude {
-    pub use crate::{Bridge, Channel, MugonPlugin, NetworkRole, Player, SettingValue};
-    #[cfg(feature = "touch-controls")]
-    pub use crate::{
-        IsTouchDevice, MugonFullscreenButton, MugonFullscreenButtonPlugin, MugonJoystick,
-        MugonJoystickKnob, MugonTouchButton, MugonTouchControlsPlugin,
-    };
+    pub use crate::{Bridge, Channel, MugonPlugin, NetworkRole, Player, PlayerCharacter, SettingValue};
+    #[cfg(feature = "fullscreen")]
+    pub use crate::{MugonFullscreenPlugin, MugonFullscreenToggle};
     #[cfg(feature = "loading")]
     pub use crate::{MugonLoading, MugonLoadingPlugin};
 }

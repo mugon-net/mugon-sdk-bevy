@@ -43,6 +43,11 @@ extern "C" {
     #[wasm_bindgen(method, getter, js_name = carryOver)]
     pub(crate) fn carry_over(this: &MugonContext) -> Option<String>;
 
+    /// `ctx.characterEditor`: `{ code, edited(code) }` when the platform runs the game as the
+    /// character editor, `undefined` otherwise.
+    #[wasm_bindgen(method, getter, js_name = characterEditor)]
+    pub(crate) fn character_editor(this: &MugonContext) -> JsValue;
+
     /// `ctx.settings`: the lobby's chosen values, keyed by setting key. Frozen at init.
     #[wasm_bindgen(method, getter)]
     pub(crate) fn settings(this: &MugonContext) -> js_sys::Object;

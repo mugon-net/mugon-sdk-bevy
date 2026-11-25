@@ -26,12 +26,24 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
+/// The character a player picked on the platform. `code` is a mugon-characters code (what
+/// `mugon-characters-bevy` renders from); the URLs serve the baked glTF (glb) and mugshot (webp)
+/// for games that don't use that library. A snapshot taken when the player connected, and the
+/// default character's until the player's own bake is done.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerCharacter {
+    pub code: String,
+    pub model_url: String,
+    pub mugshot_url: String,
+}
+
 /// A participant in the game. The name is the player's display name, supplied by the
 /// platform; it is not unique, so identify players by `id`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Player {
     pub id: String,
     pub name: String,
+    pub character: Option<PlayerCharacter>,
 }
 
 /// The part this player takes in the game's network.
@@ -61,6 +73,10 @@ pub struct Bridge {
     server_player: Player,
     settings: BTreeMap<String, SettingValue>,
     carry_over: Option<String>,
+    character_editor: Option<JsValue>,
+    /// Codes the host page asked the character editor to load, oldest first.
+    character_loads: Rc<RefCell<VecDeque<String>>>,
+    _on_character_load: Option<Closure<dyn FnMut(JsValue)>>,
     // Kept alive for as long as `Bridge` exists (i.e. for the app's lifetime) so JS can keep
     // calling into them. Never `.forget()`-leaked: dropping `Bridge` (which normally only
     // happens when the whole App/World goes away) drops these too.
@@ -73,6 +89,17 @@ fn read_player(value: &JsValue) -> Option<Player> {
     Some(Player {
         id: get_string_field(value, "id")?,
         name: get_string_field(value, "name")?,
+        character: Reflect::get(value, &JsValue::from_str("character"))
+            .ok()
+            .and_then(|character| read_character(&character)),
+    })
+}
+
+fn read_character(value: &JsValue) -> Option<PlayerCharacter> {
+    Some(PlayerCharacter {
+        code: get_string_field(value, "code")?,
+        model_url: get_string_field(value, "modelUrl")?,
+        mugshot_url: get_string_field(value, "mugshotUrl")?,
     })
 }
 
@@ -143,6 +170,20 @@ impl Bridge {
             }) as Box<dyn FnMut(JsValue)>)
         };
 
+        let character_editor = Some(context.character_editor()).filter(|editor| !editor.is_undefined());
+        let character_loads = Rc::new(RefCell::new(VecDeque::new()));
+        let on_character_load = character_editor.as_ref().and_then(|editor| {
+            let queue = character_loads.clone();
+            let closure = Closure::wrap(Box::new(move |code: JsValue| {
+                if let Some(code) = code.as_string() {
+                    queue.borrow_mut().push_back(code);
+                }
+            }) as Box<dyn FnMut(JsValue)>);
+            let on_load = Reflect::get(editor, &JsValue::from_str("onLoad")).ok()?;
+            on_load.dyn_ref::<js_sys::Function>()?.call1(editor, closure.as_ref().unchecked_ref()).ok()?;
+            Some(closure)
+        });
+
         context.on("playerConnected", on_connect.as_ref().unchecked_ref());
         context.on("playerDisconnected", on_disconnect.as_ref().unchecked_ref());
         context.on("message", on_message.as_ref().unchecked_ref());
@@ -156,6 +197,9 @@ impl Bridge {
                 .expect("Mugon context has no valid `server` player"),
             settings: settings::read_settings(&context.settings()),
             carry_over: context.carry_over(),
+            character_editor,
+            character_loads,
+            _on_character_load: on_character_load,
             context,
             _on_connect: on_connect,
             _on_disconnect: on_disconnect,
@@ -298,6 +342,41 @@ impl Bridge {
         }
         self.context
             .request_next_round(&settings::write_settings(settings), &options);
+    }
+
+    /// The player's current character code, when the platform runs this game as the character
+    /// editor of the profile page; `None` in every other game.
+    pub fn character_editor_code(&self) -> Option<String> {
+        get_string_field(self.character_editor.as_ref()?, "code")
+    }
+
+    /// The next code the host page asked the character editor to load (a code the player pasted
+    /// there), oldest first. Answer with [`report_character_code`](Self::report_character_code) once
+    /// switched, or [`character_load_failed`](Self::character_load_failed). Always `None` outside
+    /// the character editor.
+    pub fn pop_character_load(&self) -> Option<String> {
+        self.character_loads.borrow_mut().pop_front()
+    }
+
+    /// Tells the host page the character editor could not apply a code from
+    /// [`pop_character_load`](Self::pop_character_load). Only the character editor has this.
+    pub fn character_load_failed(&self, reason: &str) {
+        let Some(editor) = &self.character_editor else { return };
+        let Ok(failed) = Reflect::get(editor, &JsValue::from_str("loadFailed")) else { return };
+        if let Some(failed) = failed.dyn_ref::<js_sys::Function>() {
+            let _ = failed.call1(editor, &JsValue::from_str(reason));
+        }
+    }
+
+    /// Tells the platform the code the player's character has now (call it on every change; the
+    /// platform saves the latest one when the player confirms). Only the character editor has
+    /// this; elsewhere the call does nothing.
+    pub fn report_character_code(&self, code: &str) {
+        let Some(editor) = &self.character_editor else { return };
+        let Ok(edited) = Reflect::get(editor, &JsValue::from_str("edited")) else { return };
+        if let Some(edited) = edited.dyn_ref::<js_sys::Function>() {
+            let _ = edited.call1(editor, &JsValue::from_str(code));
+        }
     }
 
     /// What the previous round handed over through [`next_round`](Self::next_round). Only the

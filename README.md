@@ -54,9 +54,11 @@ fn setup(asset_server: Res<AssetServer>, mut loading: ResMut<MugonLoading>) {
 Track everything the game needs before it is playable; the overlay closes once all tracked
 assets have loaded (or failed). Games with nothing to load call `Bridge::loaded()` directly.
 
-### Touch controls
+### Fullscreen and touch controls
 
-The `touch-controls` feature adds joystick/button input components and a fullscreen toggle.
+The `fullscreen` feature adds `MugonFullscreenToggle` (and `MugonFullscreenPlugin`): put it on any UI entity that emits
+`bevy_ui_widgets::Activate`, such as a button, to toggle the game frame's fullscreen. Virtual joysticks and touch buttons are in
+the [`mugon-sdk-controls-bevy`](../mugon-sdk-controls-bevy) crate; the game puts them on its own UI, so the SDK does not decide how it looks.
 
 ### Editor scenes
 
